@@ -33,20 +33,17 @@ sub login {
 	my $username = shift or LOGCROAK "you must pass login a username";
 	my $password = shift or LOGCROAK "you must pass login a password";
 
-	my $json = $self->api_post(
-		'/api/json/accounts/login/',
-		[
-			username => $username,
-			password => $password
-		]
-	);
+	my $realm = "Web API";
+	my $ua = $self->get_ua();
+	$ua->credentials('demo.reviewboard.org:80', $realm, $username, $password);
+
 
 	return 1;
 }
 
 sub api_post {
 	my $self = shift;
-	$self->api_call( shift, 'POST', @_ );
+	$self->api_call( shift, 'PUT', @_ );
 }
 
 sub api_get {
@@ -64,8 +61,8 @@ sub api_call {
 
 	my $url = $self->get_review_board_url() . $path;
 	my $request;
-	if ( $method eq "POST" ) {
-		$request = POST( $url, @options );
+	if ( $method eq "PUT" ) {
+		$request = PUT( $url, @options );
 	}
 	elsif ( $method eq "GET" ) {
 		$request = GET( $url, @options );

@@ -30,7 +30,7 @@ sub create {
 	my $self = shift;
 	my %args  = @_;
 
-	my $json = $self->api_post( '/api/json/reviewrequests/new/', [%args] );
+	my $json = $self->api_post( '/api/review-requests/', [%args] );
 	if ( !$json->{review_request} ) {
 		LOGDIE "create couldn't determine ID from this JSON that it got back from the server: " . Dumper $json;
 	}
@@ -44,7 +44,7 @@ sub fetch {
 	my $self = shift;
 	my $id   = shift;
 
-	my $json = $self->api_get( '/api/json/reviewrequests/' . $id );
+	my $json = $self->api_get( '/api/review-requests/' . $id );
 	$self->{rr} = $json->{review_request};
 
 	return $self;
@@ -54,7 +54,7 @@ sub fetch_all_from_user {
 	my $self = shift;
     my $from_user = shift;
 
-	my $json = $self->api_get( '/api/json/reviewrequests/from/user/' . $from_user );
+    my $json = $self->api_get( '/api/review-requests?from-user=' . $from_user );
 
     my @rrs;
 	foreach my $request ( @{ $json->{review_requests} } ) {
@@ -68,11 +68,18 @@ sub fetch_all_from_user {
 }
 
 # this method makes POST call to reviewboard and performs required action
-sub reviewrequest_api_post {
+sub reviewrequest_api_put {
+	my $self   = shift;
+
+	return $self->api_post("/api/review-requests/" . $self->get_id() . "/" ,
+	                       Content_Type => 'form-data', 
+	                       @_ );
+}
+sub reviewrequest_api_get {
 	my $self   = shift;
 	my $action = shift;
 
-	return $self->api_post( "/api/json/reviewrequests/" . $self->get_id() . "/$action/", @_ );
+	return $self->api_get( "/api/review-requests/" . $self->get_id() . "/$action/", @_ );
 }
 
 sub get_id          { return shift->_get_field('id'); }
@@ -82,18 +89,18 @@ sub get_bugs        { return shift->_get_field('bugs_closed'); }
 
 sub get_reviewers {
 	my $self = shift;
-	return [ map { $_->{username} } @{ $self->_get_field('target_people') } ];
+	return [ map { $_->{title} } @{ $self->_get_field('target_people') } ];
 }
 
 sub get_groups {
 	my $self = shift;
-	return [ map { $_->{name} } @{ $self->_get_field('target_groups') } ];
+	return [ map { $_->{title} } @{ $self->_get_field('target_groups') } ];
 }
 
 sub get_reviews {
 	my $self = shift;
 
-	my $r = $self->reviewrequest_api_post('reviews');
+	my $r = $self->reviewrequest_api_get('reviews');
 	if ( ref( $r->{reviews} ) ne "ARRAY" ) {
 		WARN "api post to fetch reviews didn't return { 'reviews' : [] } as expected";
 	}
@@ -158,25 +165,30 @@ sub _set_field {
 	$self->{rr}->{$field} = $value;
 
     # send it to the server
-	return $self->reviewrequest_api_post( "draft/set/$field", [ value => $value, ] );
+	return $self->reviewrequest_api_put( "draft/set/$field", [ value => $value, ] );
 }
 
 # discards given review object
 sub discard_review_request {
 	my $self = shift;
-	return  $self->reviewrequest_api_post( "close/discarded" );
+	return  $self->reviewrequest_api_put(Content => "status=discarded");
 }
 
 # set status as submit for given review object
 sub submit_review_request {
 	my $self = shift;
-	return  $self->reviewrequest_api_post( "close/submitted" );
+	return  $self->reviewrequest_api_put(Content => "status=submitted") ;
+}
+
+sub reopen_review_request {
+	my $self = shift;
+	return  $self->reviewrequest_api_put(Content => "status=pending");
 }
 
 sub publish {
 	my $self = shift;
 
-    return $self->api_post( "/api/json/reviewrequests/" . $self->get_id() . "/publish/" );
+    return $self->api_post( "/api/review-requests/" . $self->get_id() . "/publish/" );
 }
 
 sub add_diff {
@@ -191,7 +203,7 @@ sub add_diff {
 		push @{$args}, ( basedir => $basedir );
 	}
 
-	$self->reviewrequest_api_post( 'diff/new', Content_Type => 'form-data', Content => $args );
+	$self->reviewrequest_api_put( 'diff/new', Content_Type => 'form-data', Content => $args );
 
 	return 1;
 }
@@ -311,9 +323,9 @@ Mark the review request as submitted.
 
 returns a string that is a representation of the review request
 
-=item C<< reviewrequest_api_post() >>
+=item C<< reviewrequest_api_put() >>
 
-makes POST call to reviewboard and performs required action.  
+makes PUT call to reviewboard and performs required action.  
 
 =back
 
